@@ -1,9 +1,38 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/study_session.dart';
 import '../models/card.dart';
+import 'database_provider.dart';
 
 class StudySessionNotifier extends StateNotifier<StudySession?> {
-  StudySessionNotifier() : super(null);
+  StudySessionNotifier(this.ref) : super(null);
+  
+  final Ref ref;
+
+  Future<void> startDailySession() async {
+    try {
+      final sessionCards = await ref.read(dailyStudyCardsProvider.future);
+      
+      if (sessionCards.isEmpty) {
+        return; // No cards to study
+      }
+      
+      final session = StudySession(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userId: 1,
+        cards: sessionCards,
+        currentIndex: 0,
+        revealState: RevealState.hidden,
+        mode: StudyMode.normal,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      
+      state = session;
+    } catch (e) {
+      // Handle error - could show snackbar or error state
+      rethrow;
+    }
+  }
 
   void startSession(StudySession session) {
     state = session.copyWith(
@@ -41,12 +70,26 @@ class StudySessionNotifier extends StateNotifier<StudySession?> {
     state = state!.nextCard();
   }
 
-  void submitReview(ReviewResult result) {
+  Future<void> submitReview(ReviewResult result) async {
     if (state == null || state!.currentCard == null) return;
     
-    // TODO: Send review to backend API
-    // For now, just move to next card
-    nextCard();
+    final currentCard = state!.currentCard!.card;
+    
+    try {
+      // Update card in database based on review result
+      final cardsDao = ref.read(cardsDAOProvider);
+      await cardsDao.updateCardAfterReview(currentCard.id, result);
+      
+      // Move to next card
+      nextCard();
+      
+      // Invalidate providers to refresh learned count
+      ref.invalidate(learnedCardsCountProvider);
+      
+    } catch (e) {
+      // Handle error - could show snackbar
+      rethrow;
+    }
   }
 
   void toggleFocusMode() {
@@ -79,7 +122,7 @@ class StudySessionNotifier extends StateNotifier<StudySession?> {
 }
 
 final studySessionProvider = StateNotifierProvider<StudySessionNotifier, StudySession?>(
-  (ref) => StudySessionNotifier(),
+  (ref) => StudySessionNotifier(ref),
 );
 
 // Computed providers for UI
