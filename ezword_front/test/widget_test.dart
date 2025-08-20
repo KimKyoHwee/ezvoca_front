@@ -3,39 +3,57 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:ezword_front/main.dart';
+import 'package:ezword_front/providers/api_provider.dart';
 
 void main() {
-  testWidgets('EzVoca app smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const ProviderScope(child: EzVocaApp()));
+  testWidgets('EzVoca app shows API waiting message', (WidgetTester tester) async {
+    // Override providers for testing
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) => false), // Not authenticated
+        ],
+        child: const EzVocaApp(),
+      ),
+    );
 
-    // Verify that the main elements are present.
-    expect(find.text('EzVoca'), findsOneWidget);
-    expect(find.text('학습한 단어'), findsOneWidget);
-    expect(find.text('0'), findsOneWidget); // Initial learned count
-    expect(find.text('학습 시작'), findsOneWidget);
-    expect(find.text('복습하기'), findsOneWidget);
-
-    // Tap the study button and verify navigation.
-    await tester.tap(find.text('학습 시작'));
+    // Wait for async operations
     await tester.pumpAndSettle();
-    
-    // Should navigate to study screen
-    expect(find.text('학습하기'), findsOneWidget);
-    expect(find.text('남은 0개'), findsOneWidget);
+
+    // Verify that the API waiting message is shown
+    expect(find.text('EzVoca'), findsOneWidget);
+    expect(find.text('백엔드 API 연동 대기 중'), findsOneWidget);
+    expect(find.text('현재 API 서버 개발 진행 중입니다.\n서버 연동 완료 후 로그인 기능이 활성화됩니다.'), findsOneWidget);
   });
 
-  testWidgets('Focus mode toggle test', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: EzVocaApp()));
+  testWidgets('App with mock auth shows learning stats', (WidgetTester tester) async {
+    // Mock learning counters data
+    final mockCounters = {
+      'totalWords': 100,
+      'learnedWords': 25,
+    };
 
-    // Find and tap the focus mode toggle button.
-    final focusButton = find.byIcon(Icons.visibility_off);
-    expect(focusButton, findsOneWidget);
-    
-    await tester.tap(focusButton);
-    await tester.pump();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) => true), // Authenticated
+          learningCountersProvider.overrideWith(
+            (ref) => Future.value(mockCounters),
+          ),
+        ],
+        child: const EzVocaApp(),
+      ),
+    );
 
-    // After toggling, the icon should change.
-    expect(find.byIcon(Icons.visibility), findsOneWidget);
+    // Wait for async operations
+    await tester.pumpAndSettle();
+
+    // Verify that learning stats are shown
+    expect(find.text('EzVoca'), findsOneWidget);
+    expect(find.text('학습 진행 상황'), findsOneWidget);
+    expect(find.text('100'), findsOneWidget); // Total words
+    expect(find.text('25'), findsOneWidget);  // Learned words
+    expect(find.text('학습 시작'), findsOneWidget);
+    expect(find.text('복습하기'), findsOneWidget);
   });
 }

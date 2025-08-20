@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/study_session.dart';
 import '../models/card.dart';
-import 'database_provider.dart';
+import 'api_provider.dart';
 
 class StudySessionNotifier extends StateNotifier<StudySession?> {
   StudySessionNotifier(this.ref) : super(null);
@@ -18,7 +18,7 @@ class StudySessionNotifier extends StateNotifier<StudySession?> {
       
       final session = StudySession(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userId: 1,
+        userId: 1, // TODO: Get from auth provider
         cards: sessionCards,
         currentIndex: 0,
         revealState: RevealState.hidden,
@@ -76,15 +76,16 @@ class StudySessionNotifier extends StateNotifier<StudySession?> {
     final currentCard = state!.currentCard!.card;
     
     try {
-      // Update card in database based on review result
-      final cardsDao = ref.read(cardsDAOProvider);
-      await cardsDao.updateCardAfterReview(currentCard.id, result);
+      // Submit review to API
+      final apiMutations = ref.read(apiMutationsProvider);
+      await apiMutations.submitReview(
+        cardId: currentCard.id,
+        result: result,
+        sessionDuration: null, // Could track session time
+      );
       
       // Move to next card
       nextCard();
-      
-      // Invalidate providers to refresh learned count
-      ref.invalidate(learnedCardsCountProvider);
       
     } catch (e) {
       // Handle error - could show snackbar
@@ -105,11 +106,16 @@ class StudySessionNotifier extends StateNotifier<StudySession?> {
     );
   }
 
-  void saveSnapshot() {
+  Future<void> saveSnapshot() async {
     if (state == null) return;
     
-    // TODO: Save session snapshot to local database
-    // This will be implemented when we add database layer
+    try {
+      final studyService = ref.read(studyServiceProvider);
+      await studyService.saveSessionSnapshot(state!);
+    } catch (e) {
+      // Handle error silently for snapshot operations
+      // This is not critical functionality
+    }
   }
 
   void restoreSnapshot(StudySession snapshot) {

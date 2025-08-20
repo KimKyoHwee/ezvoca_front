@@ -41,9 +41,12 @@ dependencies:
   # Routing
   go_router: ^13.2.0
   
-  # Local database
-  sqflite: ^2.3.0
-  path: ^1.8.3
+  # HTTP client for API calls
+  dio: ^5.3.2
+  http: ^1.1.0
+  
+  # Secure storage for JWT tokens
+  flutter_secure_storage: ^9.0.0
   
   # JSON serialization
   json_annotation: ^4.8.1
