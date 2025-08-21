@@ -13,53 +13,206 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ---
 
-## 📅 개발 진행 상황 및 아키텍처 전환 (2025-08-19 업데이트)
+## 📅 개발 진행 상황 및 아키텍처 전환 (2025-08-20 업데이트)
 
-### 🔄 **중요한 아키텍처 변경사항**
-**SQLite 로컬 DB 제거** → **백엔드 API 중심 아키텍처**
-- 모든 데이터는 백엔드 REST API를 통해 접근
-- 로컬 데이터베이스 완전 제거 예정
-- 오프라인 기능은 최소한의 캐싱으로만 지원
+### 🔄 **중요한 아키텍처 변경사항 - 완료됨** ✅
+**SQLite 로컬 DB 제거** → **백엔드 API 중심 아키텍처 전환 완료**
+- 모든 데이터는 백엔드 REST API를 통해 접근하도록 구조 변경 완료
+- 로컬 데이터베이스 완전 제거 완료 (`lib/database/` 폴더 삭제)
+- HTTP 클라이언트 인프라 구축 완료 (Dio, Flutter Secure Storage)
+- 오프라인 기능은 최소한의 캐싱으로만 지원 예정
 
-### ✅ 완료된 작업 (재구성 예정)
+### ✅ **API 아키텍처 전환 작업 완료** (2025-08-20)
 
-#### 1. **프로젝트 초기 설정**
-- `pubspec.yaml`: flutter_riverpod, go_router, ~~sqflite~~, json_annotation 추가
-- `build_runner`로 JSON 직렬화 코드 생성
-- GitHub 저장소 설정 및 초기 커밋 완료
+#### 1. **의존성 관리 및 정리**
+- `pubspec.yaml`: ~~sqflite, path~~ 제거 완료 ✅
+- `pubspec.yaml`: dio ^5.3.2, http ^1.1.0, flutter_secure_storage ^9.0.0 추가 완료 ✅
+- SQLite 관련 모든 import 정리 완료 ✅
 
-#### 2. **데이터 모델링 (`lib/models/`)**
-- `word.dart`: Word, ConfusablePair 모델 + JSON 직렬화 → **API 응답 모델로 변경 예정**
-- `card.dart`: Card 모델 + CardState, ReviewResult enum + JSON 직렬화 → **API 응답 모델로 변경 예정**
-- `study_session.dart`: StudySession, StudySessionCard + RevealState, StudyMode enum → **유지**
+#### 2. **데이터베이스 레이어 완전 제거** 🗑️ 
+- ~~`lib/database/` 폴더 전체 삭제~~ 완료 ✅
+  - ~~`database_helper.dart`~~ 삭제
+  - ~~`words_dao.dart`~~ 삭제
+  - ~~`cards_dao.dart`~~ 삭제  
+  - ~~`sample_data.dart`~~ 삭제
+  - ~~`database_seeder.dart`~~ 삭제
+- ~~`database_provider.dart`~~ 삭제 완료 ✅
 
-#### 3. ~~로컬 데이터베이스 (`lib/database/`)~~ → **🗑️ 제거 예정**
-- ~~`database_helper.dart`: SQLite 스키마 설계 및 데이터베이스 초기화~~
-- ~~`words_dao.dart`: 단어 CRUD 연산, 검색 기능, 임의 단어 선택~~
-- ~~`cards_dao.dart`: 카드 CRUD 연산, SRS 알고리즘, 일일 학습 카드 선택~~
-- ~~`sample_data.dart`: 15개 TOEFL 단어 샘플 데이터 (confusable pairs 포함)~~
-- ~~`database_seeder.dart`: 데이터베이스 초기화 및 샘플 데이터 시딩~~
+#### 3. **API 서비스 레이어 구축** 🆕
+- `lib/config/api_config.dart`: API 설정 및 엔드포인트 정의 ✅
+- `lib/services/api_client.dart`: Dio 기반 HTTP 클라이언트, JWT 토큰 관리, 인터셉터 ✅
+- `lib/services/word_service.dart`: 단어 관련 API 호출 서비스 ✅
+- `lib/services/study_service.dart`: 학습 세션, 리뷰 제출 API 서비스 ✅
 
-#### 4. **상태 관리 (`lib/providers/`)** → **API 기반으로 재구성**
-- `study_session_provider.dart`: 학습 세션 로직 → **API 호출 기반으로 변경**
-- `app_state_provider.dart`: 앱 테마, 오프라인 상태, 학습 통계 관리 → **유지**
-- ~~`database_provider.dart`: 데이터베이스 DAO 및 초기화 상태 관리~~ → **API 프로바이더로 대체**
+#### 4. **상태 관리 API 기반으로 전환** 🔄
+- `lib/providers/api_provider.dart`: API 기반 Riverpod 프로바이더 구축 ✅
+  - `apiClientProvider`: API 클라이언트 싱글톤 관리
+  - `wordServiceProvider`, `studyServiceProvider`: 서비스 레이어 프로바이더
+  - `authStateProvider`: 인증 상태 관리 (현재 false로 설정)
+  - `learningCountersProvider`, `dailyStudyCardsProvider`: API 데이터 프로바이더
+  - `ApiMutations` 클래스: 리뷰 제출, Leech 마킹 등 변경 작업 관리
 
-#### 5. **라우팅 (`lib/routes/`)**
-- `app_router.dart`: go_router 기반 선언적 라우팅 → **유지**
-- 경로: `/` (홈) → `/study` (학습) → `/study/card/:id` (카드 상세) → **유지**
+#### 5. **UI 레이어 API 연동 준비**
+- `main.dart`: API 대기 화면 표시, 인증되지 않은 상태에서 "백엔드 API 연동 대기 중" 메시지 ✅
+- `HomePage`: API 기반 학습 통계 표시, 네트워크 상태 표시기 추가 ✅
+- 인증 상태에 따른 조건부 UI 렌더링 구현 ✅
 
-#### 6. **화면 구조**
-- `main.dart`: 홈 화면 → **API 연동으로 변경 필요**
+#### 6. **테스트 코드 API 기반으로 업데이트**
+- `test/widget_test.dart`: API 프로바이더 모킹 테스트로 전환 완료 ✅
+- 인증 상태별 UI 테스트 (API 대기 화면, 학습 통계 화면) 구현 완료 ✅
+- 모든 테스트 통과 확인 완료 ✅
 
-#### 7. **테스트 및 검증**
-- `test/widget_test.dart`: 기본 위젯 테스트 → **API 모킹 테스트로 변경 필요**
+#### 7. **Git 저장소 업데이트**
+- 모든 변경사항 커밋 및 `origin/main`에 푸시 완료 ✅
+- 커밋 메시지: "Complete API architecture migration from SQLite to HTTP client infrastructure"
 
-### 🔄 현재 상태
-- **기존 로컬 DB 기반 구조**: 100% 완료 ✅ → **폐기 예정** ❌
-- **API 기반 아키텍처**: 0% (새로 시작)
-- **핵심 UX 기능**: 0% (API 연동 후 진행)
-- **테스트**: 전면 재작성 필요
+### 🔄 **현재 상태 (2025-08-20 기준)**
+- **SQLite 기반 구조**: ~~100% 완료~~ → **완전 제거됨** ✅
+- **API 기반 아키텍처**: **100% 완료** ✅ (백엔드 API 연동 대기 상태)
+- **HTTP 클라이언트 인프라**: **100% 완료** ✅
+- **JWT 토큰 관리**: **100% 완료** ✅
+- **프로바이더 리팩토링**: **100% 완료** ✅
+- **테스트 코드**: **100% 완료** ✅
+- **핵심 UX 기능**: **0%** (백엔드 API 서버 연동 후 진행 예정)
+
+### 🎯 **다음 작업 대기 중** (백엔드 API 서버 완성 후)
+- JWT 인증 플로우 활성화 (`authStateProvider` → true)
+- 실제 API 엔드포인트 연결 테스트
+- 오프라인 캐싱 전략 구현
+- 핵심 UX 기능 구현 (탭-투-리빌, 스와이프 제스처 등)
+
+---
+
+## 🤝 백엔드 팀 진행 상황 공유 (2025-08-20 업데이트)
+
+### **📊 백엔드 현재 상태**
+**Spring Boot 기본 뼈대 완성** - 핵심 엔티티 및 API 구현 필요
+
+#### **✅ 백엔드 완료된 작업들**
+1. **프로젝트 초기 설정** ✅
+   - Spring Boot 3.5.4 + Gradle 설정 완료
+   - PostgreSQL, Redis, Meilisearch, AWS S3 의존성 추가 완료
+   - Flyway 마이그레이션 설정 완료
+
+2. **데이터베이스 스키마 설계** ✅
+   ```sql
+   # /src/main/resources/db/migration/V1__Create_initial_tables.sql
+   ✅ users 테이블 (OAuth 로그인, 프로필 관리)
+   ✅ words 테이블 (단어, 발음, 정의, 난이도)
+   ✅ examples 테이블 (예문, 번역)
+   ✅ synonyms 테이블 (동의어)
+   ✅ cards 테이블 (SRS 학습 카드, SM-2 알고리즘)
+   ✅ reviews 테이블 (학습 기록, 리뷰 히스토리)
+   ✅ daily_sets 테이블 (일일 학습 세트)
+   ✅ daily_set_words 테이블 (세트-단어 연결)
+   ✅ 성능 최적화 인덱스 설정
+   ```
+
+3. **환경 설정 및 배포 준비** ✅
+   - `application.properties`: PostgreSQL, Redis, AWS S3 설정
+   - JWT 시크릿 키 설정
+   - AWS ECS Fargate 배포 아키텍처 설계 완료
+   - Docker 컨테이너화 가이드 완료
+
+#### **⏳ 백엔드 구현 필요 작업들**
+1. **핵심 엔티티 구현** (최우선 - P1)
+   ```java
+   📋 구현 필요:
+   src/main/java/com/ezvoca/server/entity/
+   ├── User.java          # ✅ 완료
+   ├── Word.java          # ❌ 구현 필요
+   ├── Card.java          # ❌ 구현 필요
+   ├── Review.java        # ❌ 구현 필요
+   ├── DailySet.java      # ❌ 구현 필요
+   ├── Example.java       # ❌ 구현 필요
+   └── Synonym.java       # ❌ 구현 필요
+   ```
+
+2. **레포지토리 레이어 구현** (P1)
+   ```java
+   📋 구현 필요:
+   src/main/java/com/ezvoca/server/repository/
+   ├── WordRepository.java
+   ├── CardRepository.java
+   ├── ReviewRepository.java
+   └── DailySetRepository.java
+   ```
+
+3. **JWT 인증 체계 구축** (P1)
+   ```java
+   📋 구현 필요:
+   src/main/java/com/ezvoca/server/security/
+   ├── SecurityConfig.java      # ❌ 구현 필요
+   ├── JwtTokenProvider.java    # ❌ 구현 필요
+   └── OAuth2LoginController.java # ❌ 구현 필요
+   ```
+
+4. **핵심 API 컨트롤러 구현** (P1)
+   ```java
+   📋 프론트엔드 대기 중인 API들:
+   src/main/java/com/ezvoca/server/controller/
+   ├── AuthController.java      # POST /api/auth/oauth/{provider}
+   ├── WordController.java      # GET /api/words
+   ├── StudyController.java     # GET /api/daily-sets, POST /api/reviews
+   └── UserController.java      # GET /api/me/counters, POST /api/leech/{wordId}
+   ```
+
+### **🚨 백엔드 긴급 요청사항**
+**프론트엔드가 API 연동 대기 중** - 백엔드 우선 구현 필요
+
+#### **1단계: 최소 기능 구현 (1주 목표)**
+- User, Word, Card, Review 엔티티 완성
+- 기본 CRUD 레포지토리 구현
+- 6개 핵심 API 엔드포인트 구현 (인증 제외)
+
+#### **2단계: 인증 시스템 (1주 목표)**  
+- JWT 인증 체계 완성
+- OAuth (Google/Apple) 로그인 구현
+- 보안 설정 완료
+
+#### **3단계: 연동 테스트**
+- 프론트엔드와 로컬 연동 테스트
+- API 문서화 (Swagger)
+- CORS 설정
+
+### **📋 프론트엔드 → 백엔드 API 스펙 요청**
+```json
+# 프론트엔드에서 기대하는 API 응답 형식
+
+GET /api/me/counters
+{
+  "totalWords": 1500,
+  "learnedWords": 450,
+  "leechWords": 23,
+  "todayReviews": 15
+}
+
+GET /api/daily-sets  
+{
+  "id": 1,
+  "name": "TOEFL Essential Day 1",
+  "words": [
+    {
+      "id": 1,
+      "word": "abundant",
+      "pronunciation": "/əˈbʌndənt/",
+      "partOfSpeech": "adjective", 
+      "meaning": "existing in large quantities; plentiful"
+    }
+  ]
+}
+
+POST /api/reviews
+Request: {
+  "cardId": 123,
+  "rating": 3,
+  "responseTimeMs": 4500
+}
+Response: {
+  "success": true,
+  "nextReviewAt": "2025-08-21T10:30:00Z"
+}
+```
 
 ---
 
@@ -235,19 +388,21 @@ dart run build_runner build # JSON 코드 생성
 
 ### **앱 배포 아키텍처**
 
-#### **모바일 앱 배포**
+#### **모바일 앱 배포 (초기 저비용 전략)**
 ```yaml
-iOS App Store:
-  - Xcode 빌드 → TestFlight β → App Store 릴리스
-  - 인증서: Apple Developer Program ($99/년)
+초기 단계 (사용자 적음):
+  - TestFlight (iOS) / Play Console 내부 테스트만 활용
+  - Apple Developer: $99/년 (필수)
+  - Google Play: $25 (일회성, 필수)
   
-Google Play Store:
-  - Android Studio/CLI 빌드 → Play Console → 스토어 배포
-  - 비용: $25 (일회성 등록비)
+대안 배포 (더 저렴):
+  - 웹 앱 우선: Flutter Web → GitHub Pages (무료)
+  - Firebase Hosting: 무료 계층 (10GB 스토리지)
+  - Netlify/Vercel: 무료 정적 호스팅
   
-대안 배포:
-  - 웹 앱: Flutter Web → AWS S3 + CloudFront 정적 호스팅
-  - 데스크톱: Flutter Desktop (Windows/macOS/Linux)
+스토어 등록 연기:
+  - 초기에는 웹 앱으로 MVP 검증
+  - 사용자 확보 후 스토어 등록 고려
 ```
 
 ### **환경별 설정 관리**
@@ -357,18 +512,21 @@ jobs:
           # Play Console 업로드 자동화
 ```
 
-#### **수동 배포 명령어**
+#### **저비용 배포 명령어**
 ```bash
 # 로컬 개발 빌드
-flutter run --flavor local
+flutter run --flavor local -d chrome  # 웹으로 테스트
 
-# 프로덕션 빌드
+# 웹 배포 (무료 호스팅)
+flutter build web --release
+# GitHub Pages
+git subtree push --prefix build/web origin gh-pages
+# 또는 Firebase Hosting
+firebase deploy --only hosting
+
+# 모바일 빌드 (스토어 등록시에만)
 flutter build ios --release --flavor production
 flutter build appbundle --release --flavor production
-
-# 웹 배포 (선택사항)
-flutter build web --release
-aws s3 sync build/web s3://ezvoca-web-app
 ```
 
 ### **배포 체크리스트**
@@ -385,21 +543,47 @@ aws s3 sync build/web s3://ezvoca-web-app
 - [ ] Play Console에서 앱 정보 등록
 - [ ] 내부 테스트 → 공개 릴리스
 
-#### **📊 성능 모니터링**
-- **Flutter**: Firebase Analytics + Crashlytics
-- **백엔드**: AWS CloudWatch (ECS Fargate 연동)
-- **사용자 피드백**: 인앱 피드백 시스템
+#### **📊 성능 모니터링 (무료/저비용)**
+- **Flutter**: Google Analytics (무료) + 기본 에러 로깅
+- **백엔드**: CloudWatch 기본 모니터링만 (상세 모니터링 비활성화)
+- **사용자 피드백**: Google Forms 또는 이메일 (무료)
 
-### **비용 예상**
+### **초기 저비용 전략**
 
-#### **앱 배포 비용**
-- **Apple Developer**: $99/년
-- **Google Play**: $25 (일회성)
-- **AWS 인프라**: $50-500/월 (사용량 기반)
-- **도메인**: $10-20/년
-- **SSL 인증서**: AWS Certificate Manager (무료)
+#### **초기 단계 배포 비용 (연간)**
+```yaml
+필수 비용:
+  - 도메인: $12-15/년 (Namecheap, GoDaddy)
+  - SSL 인증서: 무료 (Let's Encrypt)
+  
+선택적 비용:
+  - Apple Developer: $99/년 (iOS 앱 배포시에만)
+  - Google Play: $25 (일회성, Android 앱 배포시에만)
+  
+AWS 인프라 (월 비용):
+  - EC2 t3.micro: $10-15/월 (프리티어 종료 후)
+  - RDS t3.micro: $15-20/월 (프리티어 종료 후)  
+  - S3 + 데이터 전송: $5-10/월
+  - 총합: $30-45/월 ($360-540/년)
+```
 
-#### **마케팅 예산 (선택사항)**
-- **App Store 최적화**: $0-1000
-- **광고**: Google Ads, Apple Search Ads
-- **소셜 미디어**: 유기적 마케팅
+#### **무료 대안 활용 전략**
+```yaml
+완전 무료 시작:
+  - 웹 앱: GitHub Pages 호스팅 (무료)
+  - 백엔드: Heroku 무료 계층 (제한적)
+  - 데이터베이스: PostgreSQL Heroku Add-on (무료 계층)
+  - 도메인: GitHub Pages 서브도메인 (무료)
+  
+저비용 업그레이드:
+  - 사용자 50명 이하: 완전 무료
+  - 사용자 100-500명: $20-30/월
+  - 사용자 1000명+: AWS 프리티어 + $50/월
+```
+
+#### **마케팅 예산 (초기 제로 비용)**
+- **SEO 최적화**: 무료 (직접 작업)
+- **소셜 미디어**: 유기적 마케팅 (무료)
+- **커뮤니티 마케팅**: Reddit, Discord (무료)
+- **블로그**: Medium, 개인 블로그 (무료)
+- **유튜브**: 영어 학습 채널 협업 (무료)

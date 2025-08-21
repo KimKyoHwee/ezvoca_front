@@ -33,10 +33,14 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final learningCountersAsyncValue = ref.watch(learningCountersProvider);
     final authState = ref.watch(authStateProvider);
     final isLowStimulus = ref.watch(isLowStimulusModeProvider);
     final networkState = ref.watch(networkStateProvider);
+    
+    // Only watch learningCountersProvider when authenticated
+    final learningCountersAsyncValue = authState 
+        ? ref.watch(learningCountersProvider)
+        : const AsyncValue.data({'totalWords': 0, 'learnedWords': 0});
     
     return Scaffold(
       appBar: AppBar(
